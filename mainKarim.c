@@ -46,8 +46,11 @@
 
 #define ADC_0 0
 #define DELAY_ARG 600000
+#define SICONV 0
+#define NOCONV 1
 
 uint16_t ADC_result(uint8_t ADC);
+uint16_t conv(uint8_t convolucion_flag,uint16_t AudIn);
 
 void main(void) {
 	/**Variable to capture the input value*/
@@ -56,8 +59,15 @@ void main(void) {
 
 	//Valor de para el cambio de amplitud
 	//volatile uint16_t amplitud = 0;
+
 	//Valor para cambio de convolución y no convolución
-	//uint8_t convolucion_flag = 0;
+	uint32_t j = 0;
+	long double convolucion;
+	uint8_t convolucion_flag = NOCONV;
+	float resultArray[7] = { };
+	float h[7] = { 0.07840464525404556, 0.17707825519483075,
+			0.22014353249171387, 0.2759015644497544, 0.22014353249171387,
+			0.17707825519483075, 0.07840464525404556 };
 
 	//Configuración de PushButtons
 	PushButton_sw3_config();
@@ -74,7 +84,7 @@ void main(void) {
 	SIM->SCGC2 = 0x1000;
 
 	//Configuración de RGB
-	//RGB_green_config();
+	RGB_green_config();
 
 	//Configuración ADC
 	ADC0->CFG1 = ADC_CFG1_ADIV(0) | ADC_CFG1_ADLSMP_MASK |
@@ -89,9 +99,9 @@ void main(void) {
 	DAC0->DAT[0].DATH = 0;
 
 	for (;;) {
+
 		//Entrada del ADC
 		AudIn = ADC_result(ADC_0);
-		Salida = AudIn;
 
 		//Lectura de estado de push button
 		input_value_SW3 = PushButton_read(PB_SW3);
@@ -104,7 +114,11 @@ void main(void) {
 			if (FALSE == input_value_SW2) { //SW2
 				delay(DELAY_ARG);			//Debouncer
 				//si ambos sw están presionados, revisa el estado de la convolucion
-
+				if (NOCONV == convolucion_flag) {
+					convolucion_flag = SICONV;
+				} else {
+					convolucion_flag = NOCONV;
+				}
 			} else { //Si solo un sw está presionado
 
 			}
@@ -117,13 +131,19 @@ void main(void) {
 			if (FALSE == input_value_SW3) {	//SW3
 				delay(DELAY_ARG);			//Debouncer
 				//si ambos sw están presionados, revisa el estado de la convolucion
-
+				if (NOCONV == convolucion_flag) {
+					convolucion_flag = SICONV;
+				} else {
+					convolucion_flag = NOCONV;
+				}
 			} else { //Si solo un sw está presionado
 
 			}
 		}
 
+		Salida=conv(convolucion_flag, AudIn);
 		//Salida al DAC
+		//Salida = AudIn;
 		SalidaL = (uint16_t) Salida & 0xFF;
 		SalidaH = (uint16_t) ((Salida >> 8) & 0x0F);
 		DAC0->DAT[0].DATL = SalidaL;
@@ -142,3 +162,30 @@ uint16_t ADC_result(uint8_t ADC) {
 
 	return (adc_result);
 }
+
+uint16_t conv(uint8_t convolucion_flag, uint16_t AudIn) {
+	long double convolucion = 0;
+	float resultArray[7] = { };
+	uint32_t j = 0;
+	float h[7] = { 0.07840464525404556, 0.17707825519483075,
+			0.22014353249171387, 0.2759015644497544, 0.22014353249171387,
+			0.17707825519483075, 0.07840464525404556 };
+
+	if (SICONV == convolucion_flag) {	//SE REALIZA CONVOLUCIÓN
+		for (uint8_t i = 6; i >= 1; i--) {
+			resultArray[i] = resultArray[i - 1];
+		}
+		resultArray[0] = AudIn;
+
+		for (j = 0; j < 7; j++) {
+			convolucion = (resultArray[j] * h[7 - j]);
+			AudIn = (AudIn + (uint16_t) convolucion);
+		}
+		RGB_green_on();
+		return AudIn;
+	} else {
+		RGB_green_off();
+		return AudIn;
+	}
+}
+
